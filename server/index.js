@@ -3,6 +3,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import connectDB from './config/db.js';
 import authRoute from './routes/userRoute.js';
+import { notFound,errorHandler } from './middleware/errorMiddleware.js';
 
 dotenv.config();
 
@@ -22,6 +23,9 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api',authRoute);
+
+app.use(notFound);
+app.use(errorHandler);
 
 app.listen(port,()=>{
     console.log(`Server listening on ${port}`);
