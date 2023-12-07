@@ -9,10 +9,10 @@ authRoute.post('/login',loginUser);
 
 authRoute.get('/getUsers',getUsers);
 authRoute.get('/getUserProfile',protect,getUserProfile);
-authRoute.get('/getUser',getUser);
+authRoute.get('/getUser/:id',protect,getUser);
 
-authRoute.put('/updateUser',updateUser);
-authRoute.post('/changePassword',changePassword);
+authRoute.put('/updateUser',protect,updateUser);
+authRoute.post('/changePassword',protect,changePassword);
 
 authRoute.post('/forgotPassword',forgotPassword);
 authRoute.put('/resetPassword',resetPassword);

@@ -4,6 +4,7 @@ import asyncHandler from 'express-async-handler';
 import User from "../model/userModel.js";
 import Token from "../model/tokenModel.js";
 import crypto from "crypto";
+import bcrypt from "bcrypt";
 
 
 export const registerUser = asyncHandler(async (req, res) => {
@@ -53,6 +54,7 @@ export const registerUser = asyncHandler(async (req, res) => {
     } else {
       return res.json({
         token: generateToken(user._id),
+        user: user,
         message: "User logged in successfully",
       });
     }
@@ -147,29 +149,72 @@ export const registerUser = asyncHandler(async (req, res) => {
     }
   });
 
-  export const changePassword = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.userAuth._id);
-    const { oldPassword, password } = req.body;
-    if (!user) {
-      throw new Error("user not found");
-    }
-    if (!oldPassword || !password) {
-      res.status(400);
-      throw new Error("feilds are empty");
-    }
+  // export const changePassword = asyncHandler(async (req, res) => {
+  //   const user = await User.findById(req.userAuth._id);
+  //   const { oldPassword, password } = req.body;
+  //   if (!user) {
+  //     throw new Error("user not found");
+  //   }
+  //   if (!oldPassword || !password) {
+  //     res.status(400);
+  //     throw new Error("feilds are empty");
+  //   }
   
-    // check oldPassword With Password in DB
-    const correctPassword = await verifyPassword(oldPassword, password);
-    // save new password
-    if (user && correctPassword) {
-      user.password = password;
-      await user.save();
-      res.status(200).send("password change successfully");
-    } else {
-      res.status(400);
-      throw new Error("old password is incorrect");
+  //   // check oldPassword With Password in DB
+  //   const correctPassword = await verifyPassword(oldPassword, password);
+  //   // save new password
+  //   if (user && correctPassword) {
+  //     user.password = password;
+  //     await user.save();
+  //     res.status(200).send("password change successfully");
+  //   } else {
+  //     res.status(400);
+  //     throw new Error("old password is incorrect");
+  //   }
+  // });
+
+  export const changePassword = async (req, res) => {
+    console.log("Request body", req.body)
+    const newPassword = req.body.value.newPassword;
+    const confirmPassword = req.body.value.confirmPassword;
+    const sentToken = req.body.token;
+    console.log("present", sentToken)
+    const salt = await bcrypt.genSalt();
+    if (!newPassword || !confirmPassword) {
+        return res.status(400).send("Password filed cannot be empty")
     }
-  });
+    if (newPassword !== confirmPassword) {
+        res.status(400).send("Password dosen't match")
+    }
+    User.findOne({ resetToken: sentToken, expireToken: { $gt: Date.now() } })
+        .then(user => {
+            console.log("Forgot Password", user)
+            if (!user) {
+                return res.status(422).send("Try again session expired")
+            }
+            if (newPassword === confirmPassword && newPassword.length > 0) {
+                if (newPassword.length > 6) {
+                    bcrypt.hash(newPassword, salt)
+                    .then(hashedpassword => {
+                        console.log("updatedhashed", hashedpassword)
+                        User.updateOne({ _id: user._id }, { $set: { password: hashedpassword, resetToken: undefined, expireToken: undefined } })
+                            .then(result => res.status(200).send("Password Updated Successfully.."))
+                            .catch(err => {
+                                console.log(error)
+                                res.status(400).send("Try again..!!")
+                            })
+                    }).catch(err => res.status(400).send("Please check the password field.."))
+                }
+                else {
+                    res.status(400).send("Password length must be at least 6 character..")
+                }
+            }
+        }).catch(err => {
+            console.log(err)
+            res.status(400).json({ err })
+        })
+
+}
 
   export const forgotPassword = asyncHandler(async (req, res) => {
     const { email } = req.body;
