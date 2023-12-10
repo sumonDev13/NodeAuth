@@ -173,48 +173,24 @@ export const registerUser = asyncHandler(async (req, res) => {
   //   }
   // });
 
-  export const changePassword = async (req, res) => {
-    console.log("Request body", req.body)
-    const newPassword = req.body.value.newPassword;
-    const confirmPassword = req.body.value.confirmPassword;
-    const sentToken = req.body.token;
-    console.log("present", sentToken)
-    const salt = await bcrypt.genSalt();
-    if (!newPassword || !confirmPassword) {
-        return res.status(400).send("Password filed cannot be empty")
+  export const changePassword = asyncHandler(async (req, res, next) => {
+    // 1) Get user from collection
+    const user = await User.findById(req.user.id).select('+password');
+  
+    // 2) Check if POSTed current password is correct
+    if (!(await user.correctPassword(req.body.passwordCurrent, user.password))) {
+      return next(new AppError('Your current password is wrong.', 401));
     }
-    if (newPassword !== confirmPassword) {
-        res.status(400).send("Password dosen't match")
-    }
-    User.findOne({ resetToken: sentToken, expireToken: { $gt: Date.now() } })
-        .then(user => {
-            console.log("Forgot Password", user)
-            if (!user) {
-                return res.status(422).send("Try again session expired")
-            }
-            if (newPassword === confirmPassword && newPassword.length > 0) {
-                if (newPassword.length > 6) {
-                    bcrypt.hash(newPassword, salt)
-                    .then(hashedpassword => {
-                        console.log("updatedhashed", hashedpassword)
-                        User.updateOne({ _id: user._id }, { $set: { password: hashedpassword, resetToken: undefined, expireToken: undefined } })
-                            .then(result => res.status(200).send("Password Updated Successfully.."))
-                            .catch(err => {
-                                console.log(error)
-                                res.status(400).send("Try again..!!")
-                            })
-                    }).catch(err => res.status(400).send("Please check the password field.."))
-                }
-                else {
-                    res.status(400).send("Password length must be at least 6 character..")
-                }
-            }
-        }).catch(err => {
-            console.log(err)
-            res.status(400).json({ err })
-        })
-
-}
+  
+    // 3) If so, update password
+    user.password = req.body.password;
+    user.passwordConfirm = req.body.passwordConfirm;
+    await user.save();
+    // User.findByIdAndUpdate will NOT work as intended!
+  
+    // 4) Log user in, send JWT
+    createSendToken(user, 200, req, res);
+  });
 
   export const forgotPassword = asyncHandler(async (req, res) => {
     const { email } = req.body;
