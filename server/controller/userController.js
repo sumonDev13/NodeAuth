@@ -5,6 +5,7 @@ import User from "../model/userModel.js";
 import Token from "../model/tokenModel.js";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
+import { sendMail } from "../utils/email.js";
 
 
 export const registerUser = asyncHandler(async (req, res) => {
@@ -192,56 +193,83 @@ export const registerUser = asyncHandler(async (req, res) => {
     createSendToken(user, 200, req, res);
   });
 
-  export const forgotPassword = asyncHandler(async (req, res) => {
-    const { email } = req.body;
-    const user = await User.findOne({ email });
-    if (!user) {
-      res.status(404);
-      throw new Error("user not found");
-    }
-    // dleting exiting token from Db
-    let token = await Token.findOne({ userId: user._id });
-    if (token) {
-      await token.deleteOne();
-    }
-    // create token
-    let resetToken = crypto.randomBytes(32).toString("hex") + user._id;
-    // hash token
-    const hashedToken = crypto
-      .createHash("sha256")
-      .update(resetToken)
-      .digest("hex");
+  // export const forgotPassword = asyncHandler(async (req, res) => {
+  //   const { email } = req.body;
+  //   const user = await User.findOne({ email });
+  //   if (!user) {
+  //     res.status(404);
+  //     throw new Error("user not found");
+  //   }
+  //   // dleting exiting token from Db
+  //   let token = await Token.findOne({ userId: user._id });
+  //   if (token) {
+  //     await token.deleteOne();
+  //   }
+  //   // create token
+  //   let resetToken = crypto.randomBytes(32).toString("hex") + user._id;
+  //   // hash token
+  //   const hashedToken = crypto
+  //     .createHash("sha256")
+  //     .update(resetToken)
+  //     .digest("hex");
   
-    await new Token({
-      userId: user._id,
-      token: hashedToken,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + 30 * (60 * 1000),
-    }).save();
-    // construct reset url
+  //   await new Token({
+  //     userId: user._id,
+  //     token: hashedToken,
+  //     createdAt: Date.now(),
+  //     expiresAt: Date.now() + 30 * (60 * 1000),
+  //   }).save();
+  //   // construct reset url
   
-    const resetUrl = `${process.env.FRONTEND_URL}/resetpassword/${resetToken}`;
+  //   const resetUrl = `${process.env.FRONTEND_URL}/resetpassword/${resetToken}`;
   
-    // Reset Email
-    const message = `
-     <h2>Hello ${user.name}</h2>
-     <p>Please use the url below to reset your password</p>  
-     <p>This reset link is valid for only 30minutes.</p>
-     <a href=${resetUrl} clicktracking=off>${resetUrl}</a>
-     <p>Regards...</p>
-     <p>HA IT Team</p>
-   `;
-    const subject = "Password Reset Request";
-    const send_to = user.email;
-    const sent_from = process.env.EMAIL_USER;
-    try {
-      await sendEmail(subject, message, send_to, sent_from);
-      res.status(200).json({ success: true, message: "Reset Email Sent" });
-    } catch (error) {
-      res.status(500);
-      throw new Error("Email not sent, please try again");
+  //   // Reset Email
+  //   const message = `
+  //    <h2>Hello ${user.name}</h2>
+  //    <p>Please use the url below to reset your password</p>  
+  //    <p>This reset link is valid for only 30minutes.</p>
+  //    <a href=${resetUrl} clicktracking=off>${resetUrl}</a>
+  //    <p>Regards...</p>
+  //    <p>HA IT Team</p>
+  //  `;
+  //   const subject = "Password Reset Request";
+  //   const send_to = user.email;
+  //   const sent_from = process.env.EMAIL_USER;
+  //   try {
+  //     await sendEmail(subject, message, send_to, sent_from);
+  //     res.status(200).json({ success: true, message: "Reset Email Sent" });
+  //   } catch (error) {
+  //     res.status(500);
+  //     throw new Error("Email not sent, please try again");
+  //   }
+  // });
+
+  export const forgotPassword = async (req, res) => {
+    const email = req.body.email;
+    const user = await User.findOne({ email: email });
+    if (user) {
+      const token = crypto.randomBytes(48).toString('hex');
+      user.resetPasswordToken = token;
+      await user.save();
+  
+      // Also set token in email
+      const resetPageLink =
+        'http://localhost:3000/reset-password?token=' + token + '&email=' + email;
+      const subject = 'reset password for e-commerce';
+      const html = `<p>Click <a href='${resetPageLink}'>here</a> to Reset Password</p>`;
+  
+      // lets send email and a token in the mail body so we can verify that user has clicked right link
+  
+      if (email) {
+        const response = await sendMail({ to: email, subject, html });
+        res.json(response);
+      } else {
+        res.sendStatus(400);
+      }
+    } else {
+      res.sendStatus(400);
     }
-  });
+  };
 
   export const resetPassword = asyncHandler(async (req, res) => {
     const { password } = req.body;
